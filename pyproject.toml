@@ -26,9 +26,10 @@ dependencies = [
 
 [project.optional-dependencies]
 hf = ["datasets>=2.20"]
+kaggle = ["kagglehub>=0.3"]
 explore = ["matplotlib>=3.7"]
 models = ["transformers>=4.44", "torch>=2.2", "accelerate>=0.30"]
-all = ["aied-unplugged[hf,explore,models]"]
+all = ["aied-unplugged[hf,kaggle,explore,models]"]
 
 [project.urls]
 Homepage = "https://tools-competition.org/winner/aied/"

@@ -12,6 +12,9 @@ from .tracks import Track, get_track
 SPLITS = ("train", "validation", "test")
 ENV_ROOT = "AIED_UNPLUGGED_DATA"
 HF_REPO = "aiboxlab/aied-unplugged-preview"
+KAGGLE_DATASET = "aibox-lab/aied-unplugged-preview"
+
+_downloaded: Path | None = None
 
 
 class Splits(dict):
@@ -22,8 +25,26 @@ class Splits(dict):
             raise AttributeError(name) from exc
 
 
+def download(force: bool = False, dataset: str = KAGGLE_DATASET) -> Path:
+    """Download the release from Kaggle and use it as the default root from here on."""
+    try:
+        import kagglehub
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(
+            "downloading needs kagglehub: pip install 'aied-unplugged[kaggle]'"
+        ) from exc
+
+    cached = Path(kagglehub.dataset_download(dataset, force_download=force))
+    for path in [cached, *sorted(p for p in cached.iterdir() if p.is_dir())]:
+        if (path / "metadata").is_dir() and (path / "schema").is_dir():
+            global _downloaded
+            _downloaded = path.resolve()
+            return _downloaded
+    raise FileNotFoundError(f"the Kaggle download at {cached} holds no release tree")
+
+
 def find_release(root: str | Path | None = None) -> Path:
-    candidates = [root, os.environ.get(ENV_ROOT), "competition-dataset", "."]
+    candidates = [root, os.environ.get(ENV_ROOT), _downloaded, "competition-dataset", "."]
     for candidate in candidates:
         if not candidate:
             continue
@@ -31,7 +52,7 @@ def find_release(root: str | Path | None = None) -> Path:
         if (path / "metadata").is_dir() and (path / "schema").is_dir():
             return path.resolve()
     raise FileNotFoundError(
-        "no release tree found. Pass root=..., set "
+        "no release tree found. Call download(), pass root=..., set "
         f"{ENV_ROOT}, or run from a directory holding competition-dataset/."
     )
 
@@ -57,8 +78,11 @@ def load_track(
     repo: str = HF_REPO,
 ):
     resolved = get_track(track)
-    if source not in {"auto", "local", "hf"}:
-        raise ValueError("source must be 'auto', 'local' or 'hf'")
+    if source not in {"auto", "local", "kaggle", "hf"}:
+        raise ValueError("source must be 'auto', 'local', 'kaggle' or 'hf'")
+
+    if source == "kaggle":
+        root, source = download(), "local"
 
     if source in {"auto", "local"}:
         try:

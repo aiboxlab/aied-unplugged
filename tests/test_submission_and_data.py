@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
-from aied_unplugged import build, get_track, validate, write
+from aied_unplugged import build, data, get_track, validate, write
 from aied_unplugged.data import find_release
 
 RELEASE = Path(__file__).resolve().parents[2] / "competition-dataset"
@@ -87,6 +89,22 @@ def test_get_track_accepts_the_spellings_people_use():
     assert get_track("sheets").id == "answer-sheet"
     with pytest.raises(KeyError):
         get_track("nope")
+
+
+def test_download_registers_the_kaggle_tree_as_the_default_root(tmp_path, monkeypatch):
+    tree = tmp_path / "download" / "aied-unplugged-preview"
+    (tree / "metadata").mkdir(parents=True)
+    (tree / "schema").mkdir()
+    kagglehub = types.SimpleNamespace(
+        dataset_download=lambda dataset, force_download=False: str(tree.parent)
+    )
+    monkeypatch.setitem(sys.modules, "kagglehub", kagglehub)
+    monkeypatch.setattr(data, "_downloaded", None)
+    monkeypatch.delenv("AIED_UNPLUGGED_DATA", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    assert data.download() == tree.resolve()
+    assert find_release() == tree.resolve()
 
 
 @needs_release

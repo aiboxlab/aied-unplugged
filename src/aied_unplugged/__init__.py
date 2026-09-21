@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .data import (
+    download,
     graded_ids,
     load_metadata,
     load_schema,
@@ -35,6 +36,7 @@ __all__ = [
     "ValidationReport",
     "__version__",
     "build",
+    "download",
     "evaluate",
     "get_grader",
     "get_track",

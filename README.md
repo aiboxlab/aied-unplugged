@@ -1,4 +1,4 @@
-# aied-unplugged
+# AIED-Unplugged Dataset SDK
 
 Python SDK for the [AIED Preview Competition](https://tools-competition.org/winner/aied/):
 the official graders, dataset loaders, exploration helpers, and scaffolding to run a
@@ -6,7 +6,7 @@ Hugging Face model on a track.
 
 ```sh
 pip install aied-unplugged            # graders, loaders, submission tooling
-pip install 'aied-unplugged[all]'     # + datasets, matplotlib, transformers
+pip install 'aied-unplugged[all]'     # + kagglehub, datasets, matplotlib, transformers
 ```
 
 The SDK is optional. It reads the published dataset and writes the published
@@ -26,7 +26,8 @@ submission format.
 
 ## 1. Grading
 
-Same implementation the leaderboard runs, so a local score matches the submitted one.
+The graders here are the ones the leaderboard runs, so your local score matches
+your submitted one.
 
 ```python
 from aied_unplugged import evaluate
@@ -55,19 +56,16 @@ evaluate("math", predictions, validation)
 | Math | macro F1 | Unweighted mean of per-class F1 over the classes present in the reference. Predicting an absent class still costs you a false negative on the correct class. | `accuracy` |
 | Answer sheets | cell accuracy | Correct cells over total reference cells, so a 26-question sheet counts more than a 16-question one. An omitted question counts as wrong. | `sheet_exact_match` (1 only when every question on a sheet matches), cell-level `macro_f1` |
 
-Two details worth knowing. A constant prediction zeroes the QWK expected-agreement
-denominator; that case scores 1.0 if the prediction is right everywhere and 0.0
-otherwise, instead of NaN. Macro F1 skips classes absent from the reference because
-averaging over the full taxonomy would hand every submission a guaranteed zero for
-classes the split never uses, and the preview sample omits two of the thirteen.
-
-Per-competence numbers are worth reading on the essay track: a model can hold a
-decent mean while collapsing on competence 5.
+A constant prediction zeroes the QWK expected-agreement denominator. That case
+scores 1.0 when the prediction is right everywhere and 0.0 otherwise, instead of
+NaN. Macro F1 skips classes absent from the reference: averaging over the full
+taxonomy hands you a guaranteed zero for classes the split never uses, and the
+preview sample omits two of the thirteen.
 
 ### Validation checks
 
-A grader rejects the whole file rather than scoring the part it can read. It raises
-`SubmissionError` naming the ids and columns at fault, and never quotes a target
+A grader rejects the whole file instead of scoring the rows it can read. It raises
+`SubmissionError` naming the ids and columns at fault, without quoting a target
 value. Rejected files include:
 
 - a missing column
@@ -77,12 +75,41 @@ value. Rejected files include:
 - a competence score off the 0/40/80/120/160/200 grid
 - a diagnostic outside the thirteen labels
 - an answer-sheet value outside the seven
-- a `question_number` written as `"1"` instead of `1`
+- a not integer `question_number`
 - a question repeated within a sheet
 
 ---
 
 ## 2. Loading
+
+### Getting the dataset
+
+`download()` pulls the dataset from Kaggle. Needs `aied-unplugged[kaggle]`.
+
+```python
+from aied_unplugged import download, load_track
+
+download()  # into the kagglehub cache, returns the path
+load_track("math")  # the loaders below now find it
+load_track("math", source="kaggle")  # same, in one call
+load_track("math", source="hf")  # in-memory DatasetDict from the HF Hub
+```
+
+Later calls reuse the cache; pass `force=True` to re-fetch. `download()` also sets
+the default root for the process, so `explore` and `verify` run without `root=`.
+
+Both mirrors carry the same release:
+
+- Kaggle: <https://www.kaggle.com/datasets/aibox-lab/aied-unplugged-preview>
+- Hugging Face: <https://huggingface.co/datasets/aiboxlab/aied-unplugged-preview>
+
+To unpack one by hand, put `metadata/` and `schema/` under a single directory, then
+name that directory with `root=`, with `AIED_UNPLUGGED_DATA`, or as
+`competition-dataset/` in your working directory. `root=` wins over
+`AIED_UNPLUGGED_DATA`, which wins over `download()`, which wins over
+`competition-dataset/`.
+
+### Loading a track
 
 ```python
 from aied_unplugged import load_track, load_metadata, open_image
@@ -94,12 +121,10 @@ train = load_track("math", "train")  # one split
 image = open_image(train.iloc[0], "equation_image")
 ```
 
-Local loading looks for `competition-dataset/` in the working directory, the path
-in `AIED_UNPLUGGED_DATA`, or a `root=` you pass, and returns pandas DataFrames
-carrying the Parquet metadata plus resolved absolute paths in `<column>_path`.
+The local loaders return pandas DataFrames with the Parquet metadata and absolute
+image paths in `<column>_path`.
 
 ```python
-load_track("math", source="hf")  # datasets.DatasetDict with Image() features
 load_schema("math")  # the published taxonomy, fields and metrics
 graded_ids("aes")  # the ids a submission must carry
 sample_submission("aes")  # the published placeholder file
@@ -110,7 +135,8 @@ verify()  # re-check every SHA-256 in the release
 
 ## 3. Exploring
 
-Needs `aied-unplugged[explore]`.
+Needs `aied-unplugged[explore]` and a local copy of the dataset, from `download()`
+or from a mirror you unpacked yourself.
 
 ```python
 from aied_unplugged import explore
@@ -132,7 +158,7 @@ Name an item by id, by position, or by passing its metadata row.
 
 ## 4. Running a model
 
-Needs `aied-unplugged[models]`. Two strategies, enough to produce a valid
+Needs `aied-unplugged[models]`. Two strategies, either one enough for a valid
 submission and a baseline score.
 
 ```python
@@ -148,8 +174,8 @@ submission.write("math", predictions, "submission.csv")
 ```
 
 `predict` prompts the model once per item with the track's images and parses the
-reply into the submission schema. Unparseable replies fall back to a safe default,
-so every run produces a gradeable file.
+reply into the submission schema. An unparseable reply falls back to a safe
+default, so a run always ends with a gradeable file.
 
 Fine-tuning covers the math track only, as image classification over the student's
 working:
@@ -178,8 +204,8 @@ write("answer-sheet", frame, "submission.csv")
 
 `validate` runs the checks the competition site runs before upload, including the
 JSON encoding of the answer-sheet column, plus a competence-scale check the site
-does not yet perform. `build` accepts answers as a list of records or as a
-`{question_number: label}` mapping, and encodes either correctly.
+does not yet perform. `build` takes answers as a list of records or as a
+`{question_number: label}` mapping and encodes both to the same JSON.
 
 ---
 
