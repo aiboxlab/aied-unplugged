@@ -26,15 +26,12 @@ submission format.
 
 ## 1. Grading
 
-The graders here are the ones the leaderboard runs, so your local score matches
-your submitted one.
-
 ```python
 from aied_unplugged import evaluate
 
 result = evaluate("math", "my_predictions.csv", "validation_reference.csv")
 result.primary  # 0.41…  the ranking metric
-result.metrics  # every metric the leaderboard records
+result.metrics  # every metric the track reports
 result.per_example  # one row per item: true, pred, correct
 ```
 
@@ -54,7 +51,7 @@ evaluate("math", predictions, validation)
 |---|---|---|---|
 | Essays | mean QWK | Quadratic weighted kappa per competence, averaged over the five. Uses the full six-point scale rather than the values in the split, so scores don't shift with the split. | `exact_match` (per competence cell), `rmse` pooled over the five, `qwk_competence_1`…`_5`, `rmse_competence_1`…`_5` |
 | Math | macro F1 | Unweighted mean of per-class F1 over the classes present in the reference. Predicting an absent class still costs you a false negative on the correct class. | `accuracy` |
-| Answer sheets | cell accuracy | Correct cells over total reference cells, so a 26-question sheet counts more than a 16-question one. An omitted question counts as wrong. | `sheet_exact_match` (1 only when every question on a sheet matches), cell-level `macro_f1` |
+| Answer sheets | cell accuracy | Correct cells over total reference cells, so a 26-question sheet counts more than a 16-question one. | `sheet_exact_match` (1 only when every question on a sheet matches), cell-level `macro_f1` |
 
 A constant prediction zeroes the QWK expected-agreement denominator. That case
 scores 1.0 when the prediction is right everywhere and 0.0 otherwise, instead of
@@ -68,15 +65,15 @@ A grader rejects the whole file instead of scoring the rows it can read. It rais
 `SubmissionError` naming the ids and columns at fault, without quoting a target
 value. Rejected files include:
 
-- a missing column
+- an empty file, a missing column, or an extra column
 - a blank or duplicated identifier
 - an empty prediction
 - an ungraded row, or a missing row
 - a competence score off the 0/40/80/120/160/200 grid
 - a diagnostic outside the thirteen labels
 - an answer-sheet value outside the seven
-- a not integer `question_number`
-- a question repeated within a sheet
+- a `question_number` that is not an integer (`1.0` and `"1"` both fail)
+- a question repeated, missing, or not on the sheet
 
 ---
 
@@ -127,6 +124,7 @@ image paths in `<column>_path`.
 ```python
 load_schema("math")  # the published taxonomy, fields and metrics
 graded_ids("aes")  # the ids a submission must carry
+question_counts()  # questions per graded answer sheet
 sample_submission("aes")  # the published placeholder file
 verify()  # re-check every SHA-256 in the release
 ```
@@ -193,18 +191,24 @@ search.
 ## 5. Submissions
 
 ```python
-from aied_unplugged import build, validate, write, graded_ids
+from aied_unplugged import build, graded_ids, question_counts, validate, write
 
 frame = build("answer-sheet", [{"sheet_id": "s1", "answers": {1: "A", 2: "Blank"}}])
-report = validate(frame, "answer-sheet", expected_ids=graded_ids("answer-sheet"))
+report = validate(
+    frame,
+    "answer-sheet",
+    expected_ids=graded_ids("answer-sheet"),
+    expected_questions=question_counts(),
+)
 if not report.valid:
     print(report)
 write("answer-sheet", frame, "submission.csv")
 ```
 
-`validate` runs the checks the competition site runs before upload, including the
-JSON encoding of the answer-sheet column, plus a competence-scale check the site
-does not yet perform. `build` takes answers as a list of records or as a
+`validate` checks the exact column set, the identifiers, the competence scale, the
+diagnostic labels, and the JSON encoding of the answer-sheet column, including
+integer question numbers. With `expected_questions`, it also checks the question
+count on each sheet. `build` takes answers as a list of records or as a
 `{question_number: label}` mapping and encodes both to the same JSON.
 
 ---

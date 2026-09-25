@@ -171,13 +171,54 @@ def test_sheet_metrics():
     assert result.per_example.loc["s1", "correct"] == 3
 
 
-def test_sheet_missing_question_counts_against_the_sheet():
+@pytest.mark.parametrize(
+    ("questions", "message"), [((1, 2), "missing question"), ((1, 2, 3, 4), "not on the sheet")]
+)
+def test_sheet_rejects_a_question_set_unlike_the_sheet(questions, message):
     reference = sheet_reference()
     prediction = reference.copy()
-    prediction.loc[1, "answers"] = json.dumps([{"question_number": 1, "label": "A"}])
-    result = answer_sheets.score(prediction, reference)
-    assert result.per_example.loc["s2", "correct"] == 1
-    assert result.metrics["cell_accuracy"] == pytest.approx(5 / 7)
+    prediction.loc[1, "answers"] = json.dumps(
+        [{"question_number": q, "label": "A"} for q in questions]
+    )
+    with pytest.raises(SubmissionError, match=message):
+        answer_sheets.score(prediction, reference)
+
+
+def test_sheet_rejects_float_question_number():
+    reference = sheet_reference()
+    prediction = reference.copy()
+    prediction.loc[1, "answers"] = (
+        '[{"question_number": 1.0, "label": "A"}, {"question_number": 2, "label": "Blank"},'
+        ' {"question_number": 3, "label": "C"}]'
+    )
+    with pytest.raises(SubmissionError, match="not 1.0"):
+        answer_sheets.score(prediction, reference)
+
+
+def test_math_rejects_padded_label():
+    reference = math_reference()
+    prediction = reference.copy()
+    prediction.loc[0, "diagnostic"] = " Correct answer "
+    with pytest.raises(SubmissionError, match="taxonomy"):
+        math_diagnostic.score(prediction, reference)
+
+
+@pytest.mark.parametrize(
+    ("grader", "reference"),
+    [
+        (essays, essay_reference),
+        (math_diagnostic, math_reference),
+        (answer_sheets, sheet_reference),
+    ],
+)
+def test_graders_reject_extra_columns_and_empty_files(grader, reference, tmp_path):
+    frame = reference()
+    with pytest.raises(SubmissionError, match="does not accept: confidence"):
+        grader.score(frame.assign(confidence=0.5), frame)
+    empty = tmp_path / "submission.csv"
+    empty.write_text("")
+    with pytest.raises(SubmissionError, match="empty"):
+        grader.score(empty, frame)
 
 
 def test_sheet_rejects_bad_json():

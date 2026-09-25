@@ -36,7 +36,12 @@ class GraderResult:
 
 
 def as_frame(value: pd.DataFrame | str | Path) -> pd.DataFrame:
-    return value if isinstance(value, pd.DataFrame) else pd.read_csv(value)
+    if isinstance(value, pd.DataFrame):
+        return value
+    try:
+        return pd.read_csv(value)
+    except pd.errors.EmptyDataError as exc:
+        raise SubmissionError(f"{Path(value).name} is empty; it has no header row.") from exc
 
 
 def listed(items: Sequence) -> str:
@@ -51,6 +56,16 @@ def require_columns(frame: pd.DataFrame, columns: Sequence[str], what: str) -> N
         raise SubmissionError(
             f"{what} is missing the column(s): {listed(missing)}. "
             f"Expected: {', '.join(columns)}."
+        )
+
+
+def require_submission_columns(frame: pd.DataFrame, track: Track) -> None:
+    require_columns(frame, track.submission_columns, "The submission")
+    extra = [c for c in frame.columns if c not in track.submission_columns]
+    if extra:
+        raise SubmissionError(
+            f"The submission has column(s) the track does not accept: {listed(extra)}. "
+            f"Expected exactly: {', '.join(track.submission_columns)}."
         )
 
 

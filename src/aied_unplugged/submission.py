@@ -50,10 +50,15 @@ class ValidationReport:
             raise ValueError(repr(self))
 
 
-def _structured_issues(track: Track, frame: pd.DataFrame) -> list[Issue]:
+def _structured_issues(
+    track: Track, frame: pd.DataFrame, expected_questions: dict[str, int] | None
+) -> list[Issue]:
     issues: list[Issue] = []
     column = track.target_columns[0]
-    for position, raw in enumerate(frame[column], start=1):
+    sheet_ids = frame[track.id_column].astype(str).str.strip()
+    for position, (sheet_id, raw) in enumerate(
+        zip(sheet_ids, frame[column], strict=True), start=1
+    ):
         if raw is None or (isinstance(raw, float) and pd.isna(raw)) or str(raw).strip() == "":
             continue
         try:
@@ -80,7 +85,7 @@ def _structured_issues(track: Track, frame: pd.DataFrame) -> list[Issue]:
             continue
 
         seen: set[int] = set()
-        bound = len(parsed)
+        bound = (expected_questions or {}).get(sheet_id, len(parsed))
         for at, entry in enumerate(parsed, start=1):
             if not isinstance(entry, dict):
                 issues.append(
@@ -100,7 +105,7 @@ def _structured_issues(track: Track, frame: pd.DataFrame) -> list[Issue]:
                         column,
                         "structured_keys",
                         f"Row {position}, entry {at}: {QUESTION_KEY!r} must be a "
-                        'whole number. Write 1, not "1".',
+                        f"whole number. Write 1, not {json.dumps(number)}.",
                     )
                 )
             elif not 1 <= number <= bound:
@@ -198,6 +203,7 @@ def validate(
     predictions: pd.DataFrame | str | Path,
     track: str | Track,
     expected_ids: list[str] | None = None,
+    expected_questions: dict[str, int] | None = None,
     max_bytes: int = MAX_SUBMISSION_BYTES,
 ) -> ValidationReport:
     resolved = get_track(track)
@@ -214,7 +220,13 @@ def validate(
                     f"The file is {size:,} bytes. The limit is {max_bytes:,}.",
                 )
             )
-        frame = pd.read_csv(predictions)
+        try:
+            frame = pd.read_csv(predictions)
+        except pd.errors.EmptyDataError:
+            issues.append(
+                Issue(None, None, "empty_file", "The file is empty; it has no header row.")
+            )
+            return ValidationReport(False, issues, 0)
     else:
         frame = predictions
 
@@ -226,6 +238,17 @@ def validate(
                     column,
                     "missing_column",
                     f"The header does not declare a column named {column!r}.",
+                )
+            )
+    for column in frame.columns:
+        if column not in resolved.submission_columns:
+            issues.append(
+                Issue(
+                    None,
+                    column,
+                    "extra_column",
+                    f"The header declares {column!r}, which the track does not accept. "
+                    f"Expected exactly: {', '.join(resolved.submission_columns)}.",
                 )
             )
     if any(i.code == "missing_column" for i in issues):
@@ -265,7 +288,7 @@ def validate(
     elif resolved.id == "math-diagnostic":
         issues.extend(_closed_issues(resolved, frame))
     else:
-        issues.extend(_structured_issues(resolved, frame))
+        issues.extend(_structured_issues(resolved, frame, expected_questions))
 
     if expected_ids is not None:
         wanted, given = set(expected_ids), set(ids)

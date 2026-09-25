@@ -7,6 +7,7 @@ from .data import (
     load_schema,
     load_track,
     open_image,
+    question_counts,
     sample_submission,
     verify,
 )
@@ -22,7 +23,7 @@ from .tracks import (
     get_track,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "ANSWER_VALUES",
@@ -45,6 +46,7 @@ __all__ = [
     "load_schema",
     "load_track",
     "open_image",
+    "question_counts",
     "sample_submission",
     "validate",
     "verify",

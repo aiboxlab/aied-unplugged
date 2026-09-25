@@ -12,13 +12,14 @@ from .common import (
     SubmissionError,
     align,
     as_frame,
+    listed,
     require_columns,
     require_no_missing,
+    require_submission_columns,
 )
 
 TRACK = ANSWER_SHEET
 COLUMN = "answers"
-MISSING = "<missing>"
 
 
 def decode(value, sheet_id: str, what: str) -> dict[int, str]:
@@ -43,16 +44,12 @@ def decode(value, sheet_id: str, what: str) -> dict[int, str]:
                 f'with "{QUESTION_KEY}" and "{LABEL_KEY}".'
             )
         number, label = entry[QUESTION_KEY], entry[LABEL_KEY]
-        if (
-            isinstance(number, bool)
-            or not isinstance(number, (int, float))
-            or int(number) != number
-        ):
+        if isinstance(number, bool) or not isinstance(number, int):
             raise SubmissionError(
                 f"{what} answers for {sheet_id}: entry {position} has a "
-                f'"{QUESTION_KEY}" that is not a whole number. Write 1, not "1".'
+                f'"{QUESTION_KEY}" that is not a whole number. Write 1, not '
+                f"{json.dumps(number)}."
             )
-        number = int(number)
         if number < 1:
             raise SubmissionError(
                 f"{what} answers for {sheet_id}: entry {position} numbers a question below 1."
@@ -74,7 +71,7 @@ def score(
     predictions: pd.DataFrame | str | Path, references: pd.DataFrame | str | Path
 ) -> GraderResult:
     predictions, references = as_frame(predictions), as_frame(references)
-    require_columns(predictions, TRACK.submission_columns, "The submission")
+    require_submission_columns(predictions, TRACK)
     require_columns(references, [COLUMN], "The reference")
     predictions, references = align(predictions, references, TRACK)
     require_no_missing(predictions, [COLUMN])
@@ -83,11 +80,20 @@ def score(
     for sheet_id in references.index:
         expected = decode(references.loc[sheet_id, COLUMN], sheet_id, "The reference")
         given = decode(predictions.loc[sheet_id, COLUMN], sheet_id, "The submission")
+        if given.keys() != expected.keys():
+            missing = sorted(expected.keys() - given.keys())
+            extra = sorted(given.keys() - expected.keys())
+            problems = [f"missing question(s) {listed(missing)}"] if missing else []
+            problems += [f"question(s) {listed(extra)} not on the sheet"] if extra else []
+            raise SubmissionError(
+                f"The submission answers for {sheet_id} must cover questions 1 to "
+                f"{len(expected)} exactly: {'; '.join(problems)}."
+            )
 
-        correct = sum(1 for q, label in expected.items() if given.get(q) == label)
+        correct = sum(1 for q, label in expected.items() if given[q] == label)
         for question, label in expected.items():
             truth_cells.append(label)
-            guess_cells.append(given.get(question, MISSING))
+            guess_cells.append(given[question])
 
         rows.append(
             {

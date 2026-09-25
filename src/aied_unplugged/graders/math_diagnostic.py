@@ -14,6 +14,7 @@ from .common import (
     listed,
     require_columns,
     require_no_missing,
+    require_submission_columns,
 )
 
 TRACK = MATH
@@ -21,7 +22,7 @@ COLUMN = "diagnostic"
 
 
 def _labels(frame: pd.DataFrame, what: str) -> list[str]:
-    values = frame[COLUMN].astype(str).str.strip()
+    values = frame[COLUMN].astype(str)
     unknown = ~values.isin(DIAGNOSTIC_LABELS)
     if unknown.any():
         raise SubmissionError(
@@ -36,7 +37,7 @@ def score(
     predictions: pd.DataFrame | str | Path, references: pd.DataFrame | str | Path
 ) -> GraderResult:
     predictions, references = as_frame(predictions), as_frame(references)
-    require_columns(predictions, TRACK.submission_columns, "The submission")
+    require_submission_columns(predictions, TRACK)
     require_columns(references, [COLUMN], "The reference")
     predictions, references = align(predictions, references, TRACK)
     require_no_missing(predictions, [COLUMN])

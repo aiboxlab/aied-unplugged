@@ -14,6 +14,7 @@ from .common import (
     listed,
     require_columns,
     require_no_missing,
+    require_submission_columns,
 )
 
 TRACK = AES
@@ -43,7 +44,7 @@ def score(
     predictions: pd.DataFrame | str | Path, references: pd.DataFrame | str | Path
 ) -> GraderResult:
     predictions, references = as_frame(predictions), as_frame(references)
-    require_columns(predictions, TRACK.submission_columns, "The submission")
+    require_submission_columns(predictions, TRACK)
     require_columns(references, list(COMPETENCES), "The reference")
     predictions, references = align(predictions, references, TRACK)
     require_no_missing(predictions, list(COMPETENCES))

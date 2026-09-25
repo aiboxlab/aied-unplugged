@@ -53,6 +53,38 @@ def test_validate_reports_structured_problems():
     assert {"structured_keys", "structured_value", "structured_parse"} <= codes
 
 
+def test_validate_rejects_extra_columns_and_empty_files(tmp_path):
+    frame = pd.DataFrame({"equation_id": ["m1"], "diagnostic": ["Correct answer"]})
+    report = validate(frame.assign(notes="x"), "math")
+    assert [issue.code for issue in report.issues] == ["extra_column"]
+    empty = tmp_path / "submission.csv"
+    empty.write_text("")
+    assert [issue.code for issue in validate(empty, "math").issues] == ["empty_file"]
+
+
+def test_validate_checks_question_counts():
+    def sheet(n):
+        return json.dumps([{"question_number": q, "label": "A"} for q in range(1, n + 1)])
+
+    frame = pd.DataFrame(
+        {"sheet_id": ["s1", "s2", "s3"], "answers": [sheet(3), sheet(2), sheet(4)]}
+    )
+    report = validate(frame, "answer-sheet", expected_questions={"s1": 3, "s2": 3, "s3": 3})
+    messages = [issue.message for issue in report.issues]
+    assert messages == [
+        "Row 2: question 3 is missing.",
+        "Row 3, entry 4: question 4 is outside the range 1 to 3.",
+    ]
+
+
+def test_validate_quotes_the_bad_question_number():
+    frame = pd.DataFrame(
+        {"sheet_id": ["s1"], "answers": ['[{"question_number": 1.0, "label": "A"}]']}
+    )
+    report = validate(frame, "answer-sheet")
+    assert "Write 1, not 1.0." in report.issues[0].message
+
+
 def test_validate_reports_duplicates_and_blanks():
     frame = pd.DataFrame(
         {"equation_id": ["m1", "m1", " "], "diagnostic": ["Correct answer"] * 3}
@@ -109,7 +141,7 @@ def test_download_registers_the_kaggle_tree_as_the_default_root(tmp_path, monkey
 
 @needs_release
 def test_release_loads_and_samples_validate():
-    from aied_unplugged import graded_ids, load_metadata, sample_submission
+    from aied_unplugged import graded_ids, load_metadata, question_counts, sample_submission
 
     assert find_release(RELEASE) == RELEASE.resolve()
     for name in ("essays", "math", "answer_sheets"):
@@ -120,7 +152,10 @@ def test_release_loads_and_samples_validate():
             assert Path(frame[f"{column}_path"].iloc[0]).exists()
 
         sample = sample_submission(track, RELEASE)
-        report = validate(sample, track, expected_ids=graded_ids(track, RELEASE))
+        counts = question_counts(RELEASE) if track.id == "answer-sheet" else None
+        report = validate(
+            sample, track, expected_ids=graded_ids(track, RELEASE), expected_questions=counts
+        )
         assert report.valid, repr(report)
 
 

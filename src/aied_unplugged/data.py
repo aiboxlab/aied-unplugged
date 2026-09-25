@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .tracks import Track, get_track
+from .tracks import ANSWER_SHEET, Track, get_track
 
 SPLITS = ("train", "validation", "test")
 ENV_ROOT = "AIED_UNPLUGGED_DATA"
@@ -126,6 +126,11 @@ def graded_ids(track: str | Track, root: str | Path | None = None) -> list[str]:
     resolved = get_track(track)
     frame = load_metadata(resolved, root, "test")
     return list(frame[resolved.id_column])
+
+
+def question_counts(root: str | Path | None = None) -> dict[str, int]:
+    frame = load_metadata(ANSWER_SHEET, root, "test")
+    return dict(zip(frame["sheet_id"], frame["num_questions"].astype(int), strict=True))
 
 
 def verify(track: str | Track | None = None, root: str | Path | None = None) -> pd.DataFrame:
