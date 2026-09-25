@@ -1,5 +1,9 @@
 # AIED-Unplugged Dataset SDK
 
+[![PyPI](https://img.shields.io/pypi/v/aied-unplugged)](https://pypi.org/project/aied-unplugged/)
+[![Python](https://img.shields.io/pypi/pyversions/aied-unplugged)](https://pypi.org/project/aied-unplugged/)
+[![License](https://img.shields.io/pypi/l/aied-unplugged)](https://github.com/aiboxlab/aied-unplugged/blob/main/LICENSE)
+
 Python SDK for the [AIED Preview Competition](https://tools-competition.org/winner/aied/):
 the official graders, dataset loaders, exploration helpers, and scaffolding to run a
 Hugging Face model on a track.
